@@ -1,0 +1,423 @@
+# ============================================
+# COHERENCE CONSERVATION PRINCIPLE SIMULATION
+# FULL WORKING GOOGLE COLAB VERSION
+# ============================================
+
+# If matplotlib graph does not show in Colab
+%matplotlib inline
+
+# ---------------- IMPORTS ----------------
+import numpy as np
+import matplotlib.pyplot as plt
+import random
+
+# ---------------- CONFIGURATION ----------------
+GRID_SIZE = 40
+INIT_POPULATION = 100
+SIM_STEPS = 800
+
+RESOURCE_REGEN_BASE = 0.2
+MAX_RESOURCE_CAP = 12.0
+
+MUTATION_RATE = 0.15
+MUTATION_STEP = 0.1
+
+
+# ============================================
+# AGENT CLASS
+# ============================================
+
+class EvolutionaryAgent:
+
+    def __init__(self, x, y, aggression=0.5):
+
+        self.x = x
+        self.y = y
+
+        self.energy = 15.0
+        self.age = 0
+
+        # 0.0 = Full Coherence
+        # 1.0 = Full Extraction
+        self.aggression = np.clip(aggression, 0.0, 1.0)
+
+        self.last_expected_resource = 0.0
+        self.accumulated_prediction_error = 0.0
+
+    def move(self):
+
+        self.x = (self.x + random.choice([-1, 0, 1])) % GRID_SIZE
+        self.y = (self.y + random.choice([-1, 0, 1])) % GRID_SIZE
+
+        metabolic_cost = 0.4 + (self.aggression * 0.2)
+
+        self.energy -= metabolic_cost
+        self.age += 1
+
+
+# ============================================
+# ENVIRONMENT CLASS
+# ============================================
+
+class EvolvingEnvironment:
+
+    def __init__(self):
+
+        self.resources = np.full(
+            (GRID_SIZE, GRID_SIZE),
+            MAX_RESOURCE_CAP
+        )
+
+        self.local_entropy = np.zeros(
+            (GRID_SIZE, GRID_SIZE)
+        )
+
+    def regenerate(self):
+
+        regen_dampening = 1.0 / (1.0 + self.local_entropy)
+
+        self.resources = np.minimum(
+            MAX_RESOURCE_CAP,
+            self.resources + RESOURCE_REGEN_BASE * regen_dampening
+        )
+
+        # entropy naturally dissipates
+        self.local_entropy = np.maximum(
+            0.0,
+            self.local_entropy - 0.03
+        )
+
+
+# ============================================
+# MAIN SIMULATION
+# ============================================
+
+def run_evolutionary_simulation():
+
+    env = EvolvingEnvironment()
+
+    agents = []
+
+    # Initialize Population
+    for _ in range(INIT_POPULATION):
+
+        agents.append(
+            EvolutionaryAgent(
+                random.randint(0, GRID_SIZE - 1),
+                random.randint(0, GRID_SIZE - 1),
+                aggression=0.5
+            )
+        )
+
+    # --------- HISTORY TRACKING ---------
+
+    pop_history = []
+    avg_aggression_history = []
+    macro_entropy_history = []
+    macro_coherence_history = []
+
+    # ====================================
+    # MAIN LOOP
+    # ====================================
+
+    for step in range(SIM_STEPS):
+
+        env.regenerate()
+
+        random.shuffle(agents)
+
+        # Density Map
+        density_map = np.zeros((GRID_SIZE, GRID_SIZE))
+
+        for a in agents:
+            density_map[a.x, a.y] += 1
+
+        surviving_agents = []
+
+        step_prediction_errors = []
+
+        # ====================================
+        # AGENT ACTIONS
+        # ====================================
+
+        for a in agents:
+
+            # Prediction Error
+            actual_res = env.resources[a.x, a.y]
+
+            pred_error = abs(
+                a.last_expected_resource - actual_res
+            )
+
+            a.accumulated_prediction_error = (
+                (a.accumulated_prediction_error * 0.8)
+                + (pred_error * 0.2)
+            )
+
+            step_prediction_errors.append(pred_error)
+
+            # Move
+            a.move()
+
+            # Death Check
+            if a.energy <= 0:
+                continue
+
+            cx, cy = a.x, a.y
+
+            res_available = env.resources[cx, cy]
+
+            local_density = density_map[cx, cy]
+
+            # ====================================
+            # RESOURCE HARVEST
+            # ====================================
+
+            max_harvest_capacity = (
+                1.0 + (a.aggression * 4.0)
+            )
+
+            harvest = min(
+                res_available,
+                max_harvest_capacity
+            )
+
+            a.energy += harvest
+
+            env.resources[cx, cy] -= harvest
+
+            # Entropy Injection
+            env.local_entropy[cx, cy] += (
+                a.aggression * 1.2
+            )
+
+            # ====================================
+            # COHERENCE / REPAIR MECHANISM
+            # ====================================
+
+            if a.aggression < 0.5 and local_density > 1:
+
+                repair_potential = (
+                    (0.5 - a.aggression) * 0.6
+                )
+
+                if a.energy > repair_potential:
+
+                    a.energy -= (
+                        repair_potential * 0.5
+                    )
+
+                    env.local_entropy[cx, cy] = max(
+                        0.0,
+                        env.local_entropy[cx, cy]
+                        - repair_potential
+                    )
+
+            # Update memory
+            a.last_expected_resource = (
+                env.resources[cx, cy]
+            )
+
+            # ====================================
+            # REPRODUCTION
+            # ====================================
+
+            if a.energy >= 32.0:
+
+                a.energy /= 2
+
+                child_aggression = a.aggression
+
+                # Mutation
+                if random.random() < MUTATION_RATE:
+
+                    child_aggression += random.choice([
+                        -MUTATION_STEP,
+                        MUTATION_STEP
+                    ])
+
+                child_aggression = np.clip(
+                    child_aggression,
+                    0.0,
+                    1.0
+                )
+
+                child = EvolutionaryAgent(
+                    a.x,
+                    a.y,
+                    aggression=child_aggression
+                )
+
+                surviving_agents.append(child)
+
+            surviving_agents.append(a)
+
+        # Update population
+        agents = surviving_agents
+
+        # ====================================
+        # SYSTEM METRICS
+        # ====================================
+
+        pop_size = len(agents)
+
+        if pop_size == 0:
+            print(f"Systemic Collapse at Step {step}")
+            break
+
+        avg_aggression = np.mean([
+            a.aggression for a in agents
+        ])
+
+        avg_entropy = np.mean(
+            env.local_entropy
+        )
+
+        mean_pred_error = (
+            np.mean(step_prediction_errors)
+            if step_prediction_errors
+            else 0
+        )
+
+        coherence_metric = (
+            1.0 / (1.0 + mean_pred_error)
+        )
+
+        # Store history
+        pop_history.append(pop_size)
+        avg_aggression_history.append(avg_aggression)
+        macro_entropy_history.append(avg_entropy)
+        macro_coherence_history.append(coherence_metric)
+
+    # ============================================
+    # VISUALIZATION
+    # ============================================
+
+    time_axis = np.arange(len(pop_history))
+
+    fig, (ax1, ax2) = plt.subplots(
+        2,
+        1,
+        figsize=(12, 9),
+        sharex=True
+    )
+
+    # ====================================
+    # GRAPH 1
+    # ====================================
+
+    ax1.plot(
+        time_axis,
+        pop_history,
+        color='black',
+        linestyle='--',
+        linewidth=2,
+        label='Population'
+    )
+
+    ax1.set_ylabel("Population")
+
+    ax1_twin = ax1.twinx()
+
+    ax1_twin.plot(
+        time_axis,
+        avg_aggression_history,
+        color='darkorange',
+        linewidth=2.5,
+        label='Aggression'
+    )
+
+    ax1_twin.set_ylabel(
+        "Aggression",
+        color='darkorange'
+    )
+
+    ax1_twin.tick_params(
+        axis='y',
+        labelcolor='darkorange'
+    )
+
+    ax1.grid(True, alpha=0.3)
+
+    ax1.set_title(
+        "Emergent Evolution of the Coherence Conservation Principle"
+    )
+
+    # ====================================
+    # GRAPH 2
+    # ====================================
+
+    ax2.plot(
+        time_axis,
+        macro_entropy_history,
+        color='crimson',
+        linewidth=2,
+        label='Entropy'
+    )
+
+    ax2.set_ylabel(
+        "Entropy",
+        color='crimson'
+    )
+
+    ax2.tick_params(
+        axis='y',
+        labelcolor='crimson'
+    )
+
+    ax2.grid(True, alpha=0.3)
+
+    ax2_twin = ax2.twinx()
+
+    ax2_twin.plot(
+        time_axis,
+        macro_coherence_history,
+        color='teal',
+        linewidth=2,
+        label='Coherence'
+    )
+
+    ax2_twin.set_ylabel(
+        "Coherence",
+        color='teal'
+    )
+
+    ax2_twin.tick_params(
+        axis='y',
+        labelcolor='teal'
+    )
+
+    # ====================================
+    # LEGENDS
+    # ====================================
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax1_twin.get_legend_handles_labels()
+
+    ax1.legend(
+        lines1 + lines2,
+        labels1 + labels2,
+        loc='upper left'
+    )
+
+    lines3, labels3 = ax2.get_legend_handles_labels()
+    lines4, labels4 = ax2_twin.get_legend_handles_labels()
+
+    ax2.legend(
+        lines3 + lines4,
+        labels3 + labels4,
+        loc='upper left'
+    )
+
+    plt.xlabel("Evolutionary Time Steps")
+
+    fig.tight_layout()
+
+    plt.show()
+
+
+# ============================================
+# RUN SIMULATION
+# ============================================
+
+run_evolutionary_simulation()
