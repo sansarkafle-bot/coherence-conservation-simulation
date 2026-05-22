@@ -1,5 +1,36 @@
-# coherence-conservation-simulation
-An evolutionary agent-based simulation exploring the relationship between extraction, entropy, systemic coherence, and sustainability.  Features: - Evolutionary dynamics - Mutation systems - Environmental entropy - Predictive coherence metrics -Resource regeneration feedback loops- Multi-axis visualization  Built with Python, NumPy, and Matplotlib.
-## Simulation Output
+# Coherence Conservation Principle Simulation
 
-![Output](download.png)
+This project simulates evolutionary dynamics between:
+
+- Short-term extractive behavior
+- Long-term coherence-preserving behavior
+
+The simulation models:
+
+- Resource regeneration
+- Environmental entropy
+- Predictive coherence
+- Evolutionary mutation
+- Population collapse dynamics
+
+## Features
+
+- Agent-Based Modeling (ABM)
+- Evolutionary adaptation
+- Entropy tracking
+- Coherence metrics
+- Multi-axis visualization
+
+## Example Output
+
+![Simulation Output](download.png)
+
+## Technologies Used
+
+- Python
+- NumPy
+- Matplotlib
+
+## Author
+
+Created by Kristina Chettri
